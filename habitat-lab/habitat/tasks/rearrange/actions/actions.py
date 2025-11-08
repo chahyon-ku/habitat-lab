@@ -4,13 +4,18 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from glob import glob
+import os
 from typing import Optional
 
+from imageio import imread, imwrite
 import magnum as mn
+from matplotlib import pyplot as plt
 import numpy as np
 from gym import spaces
 
 import habitat_sim
+import torch
 from habitat.articulated_agents.robots.stretch_robot import (
     StretchJointStates,
     StretchRobot,
@@ -33,6 +38,7 @@ from habitat.tasks.rearrange.actions.grip_actions import (
 )
 from habitat.tasks.rearrange.rearrange_sim import RearrangeSim
 from habitat.tasks.rearrange.utils import rearrange_collision, rearrange_logger
+from rerender_ovmm.rerender_agent.rerender_visualizer import crop_and_resize
 
 
 @registry.register_task_action
@@ -802,6 +808,48 @@ class BaseWaypointTeleportAction(ArticulatedAgentAction):
             goal_pos[i][1] = 0.0
             end_pos.append(pos)
             move.append((end_pos[i] - goal_pos[i]).length())
+            # if move[-1] >  self._collision_threshold:
+            #     # topdown_view = self._sim.pathfinder.get_topdown_view(0.01, 0.0)
+            #     # topdown_view = self._sim.pathfinder.get_topdown_view(0.01, 0.0)
+            #     scene_name = self._sim.ep_info.scene_id.split("/")[-1].split(".")[0]
+            #     base_dir = os.path.dirname(os.path.dirname(self._sim.ep_info.scene_id))
+            #     scenes_dir = os.path.basename(os.path.dirname(self._sim.ep_info.scene_id))
+            #     topdown_path = glob(os.path.join(
+            #         base_dir,
+            #         "navmeshes",
+            #         scenes_dir,
+            #         self._sim.articulated_agent.cls_uuid,
+            #         scene_name + "*.png",
+            #     ))[0]
+            #     topdown_view = imread(topdown_path)
+            #     min_xyz, max_xyz = self._sim.pathfinder.get_bounds()
+            #     cur_ij = np.array([
+            #         (cur_pos[i][2] - min_xyz[2]) // 0.01,
+            #         (cur_pos[i][0] - min_xyz[0]) // 0.01,
+            #     ], dtype=np.int32)
+            #     goal_ij = np.array([
+            #         (goal_pos[i][2] - min_xyz[2]) // 0.01,
+            #         (goal_pos[i][0] - min_xyz[0]) // 0.01,
+            #     ], dtype=np.int32)
+            #     end_ij = np.array([
+            #         (end_pos[i][2] - min_xyz[2]) // 0.01,
+            #         (end_pos[i][0] - min_xyz[0]) // 0.01,
+            #     ], dtype=np.int32)
+            #     topdown_view[cur_ij[0], cur_ij[1]] = [255, 0, 0]
+            #     topdown_view[goal_ij[0], goal_ij[1]] = [0, 255, 0]
+            #     topdown_view[end_ij[0], end_ij[1]] = [0, 0, 255]
+            #     # min_ij = np.minimum(np.minimum(cur_ij, goal_ij), end_ij)
+            #     # max_ij = np.maximum(np.maximum(cur_ij, goal_ij), end_ij)
+            #     # center_ij = (min_ij + max_ij) // 2
+            #     # topdown_view = crop_and_resize(
+            #     #     image=torch.from_numpy(topdown_view).permute(2,0,1),
+            #     #     center_ij=(int(center_ij[0]), int(center_ij[1])),
+            #     #     crop_hw=(128, 128),
+            #     #     resize_hw=(128, 128)
+            #     # )[0].cpu().numpy().transpose(1, 2, 0)
+
+            #     os.makedirs('debug', exist_ok=True)
+            #     imwrite(f"debug/collision_{scene_name}_{self._sim.ep_info.episode_id}.png", topdown_view)
 
         # There is a collision if the distance between the clamped navmesh position and target position is greater than the self._collision_threshold.
         diff = len([v for v in move if v > self._collision_threshold])

@@ -1161,6 +1161,125 @@ class CameraPoseSensor(Sensor):
         start_trans[:3, 3] = start_pos
         start_trans = mn.Matrix4(start_trans)
         agent_trans = self._sim._default_agent.scene_node.transformation
+
+        # NOTE(ku) kinematic chain debugging
+        # world_T_links = {}
+        # world_T_links['base_link'] = xyz_rpy_to_T(
+        #     xyz=np.array([0., 0., 0.]),
+        #     rpy=np.array([np.pi/2, 0., 0.])
+        # )
+        # # world_T_links['link_mast'] = world_T_links['base_link'] @ xyz_rpy_to_T(
+        # #     # xyz=np.array([-0.0700, 0.1350, 0.0284]),
+        # #     xyz=np.array([-0.0700001717, 0.1169315204, -0.1347060204]),
+        # #     # rpy=np.array([1.5708, 0.0100, 0.0093]),
+        # #     rpy=np.array([0.0100958, 0.009253, 0.0000000000])
+        # # )
+        # world_T_links['link_mast'] = world_T_links['base_link'] @ np.array([
+        #     [0.9999572039, 0.0000000009, 0.0092532039, -0.0700001717],
+        #     [-0.0092527568, 0.0100962017, 0.9999061823, -0.1347060204],
+        #     [-0.0000934210, -0.9999490380, 0.0100957695, -0.1169315204],
+        #     # [0.9999572039, 0.0000000009, 0.0092532039, 0.0394611359],
+        #     # [0.0000934210, 0.9999490380, -0.0100957695, 0.0254521370],
+        #     # [-0.0092527568, 0.0100962017, 0.9999061823, 0.1363701820],
+        #     # [-0.0092527568, 0.0100962017, 0.9999061823, 0.1363701820],
+        #     # [0.9999572039, 0.0000000009, 0.0092532039, 0.0394611359],
+        #     # [0.0000934210, 0.9999490380, -0.0100957695, 0.0254521370],
+        #     [0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000],
+        # ], dtype=np.float32)
+        # world_T_links['link_head'] = world_T_links['link_mast'] @ xyz_rpy_to_T(
+        #     xyz=np.array([0, 1.33, 0]),
+        #     rpy=np.array([1.5708, -1.5615, 3.1416])
+        # )
+        # # world_T_links['link_head'] = world_T_links['base_link'] @ np.array([
+        # #     # [-0.0000431836, 1.0000000000, -0.0000109868, -0.0700001717],
+        # #     # [-0.0100962818, 0.0000106096, 0.9999490380, 1.4468637705],
+        # #     # [0.9999489784, 0.0000432730, 0.0100962790, -0.1212778091],
+        # #     [-0.0000431836, 1.0000000000, -0.0000109868, 0.0394606590],
+        # #     [-0.0100962818, 0.0000106096, 0.9999490380, 1.3553843498],
+        # #     [0.9999489784, 0.0000432730, 0.0100962790, -0.1229424477],
+        # #     [0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000],
+        # # ], dtype=np.float32)
+        # # world_T_links['link_head'] = world_T_links['link_mast'] @ np.array([
+        # #     [-0.0092963856, 0.9999567270, -0.0000109879, 0.0000000075],
+        # #     [-0.0000000810, 0.0000110474, 1.0000000000, 1.3300000429],
+        # #     [0.9999567270, 0.0092963912, -0.0000000251, 0.0000002682],
+        # #     # [-0.0092963856, 0.9999567270, -0.0000109879, 0.0025231168],
+        # #     # [-0.0000000810, 0.0000110474, 1.0000000000, 1.3272464275],
+        # #     # [0.9999567270, 0.0092963912, -0.0000000251, -0.2727150023],
+        # #     [0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000],
+        # # ], dtype=np.float32)
+        # world_T_links['link_head_pan'] = world_T_links['link_head'] @ xyz_rpy_to_T(
+        #     xyz=np.array([0.1350, 0.0731, -0.003]),
+        #     rpy=np.array([-6.4986E-15, -6.068E-24, 1.5708 + 0.])
+        # )
+        # world_T_links['link_head_tilt'] = world_T_links['link_head_pan'] @ xyz_rpy_to_T(
+        #     xyz=np.array([-0.0013, 0.0275, -0.0533]),
+        #     rpy=np.array([1.5708, 6.068E-24, -2.5165E-15])
+        # ) @ xyz_rpy_to_T(
+        #     rpy=np.array([0, 0, -np.radians(30)])
+        # )
+        # world_T_links['camera_bottom_screw_frame'] = world_T_links['link_head_tilt'] @ xyz_rpy_to_T(
+        #     xyz=np.array([0.0300, -0.0122, 0.0182]),
+        # )
+        # world_T_links['camera_link'] = world_T_links['camera_bottom_screw_frame'] @ xyz_rpy_to_T(
+        #     xyz=np.array([0.0106, 0.0175, 0.0125]),
+        # )
+        # world_T_links['camera_color_frame'] = world_T_links['camera_link'] @ xyz_rpy_to_T(
+        #     xyz=np.array([0.0, 0.015, 0.0]),
+        # )
+        # world_T_links['camera_color_optical_frame'] = world_T_links['camera_color_frame'] @ xyz_rpy_to_T(
+        #     rpy=np.array([-1.5707963267948966, 0, -1.5707963267948966])
+        # )
+        # world_T_links['head_rgb'] = (  # camera pose
+        #     world_T_links['camera_color_optical_frame']
+        #     @ xyz_rpy_to_T(  # cam_transform
+        #         xyz=np.array([0.0, 0.0, 0.1]),
+        #         rpy=np.array([0.0, np.pi / 2, 0.0])
+        #     ) @ xyz_rpy_to_T(  # cam_info.relative_transform
+        #         xyz=np.array([0.0, 0.0, 0.0]),
+        #         rpy=np.array([-np.pi/2, 0.0, -np.pi/2])
+        #     ) @ xyz_rpy_to_T(
+        #         rpy=np.array([np.pi, 0, 0])
+        #     )
+        # )
+        # link_names = [
+        #     'base_link',
+        #     'link_mast',
+        #     'link_head',
+        #     'link_head_pan',
+        #     'link_head_tilt',
+        #     'camera_bottom_screw_frame',
+        #     'camera_link',
+        #     'camera_color_frame',
+        #     'camera_color_optical_frame',
+        # ]
+        # sim_obj = self._sim.get_articulated_object_manager().get_object_by_handle('hab_stretch_:0000')
+        # for link_id in range(43):
+        #     link_name = sim_obj.get_link_name(link_id)
+        #     link_node = sim_obj.get_link_scene_node(link_id)
+        #     if link_name in link_names:
+        #         print(f'Link {link_id} {link_name}-------------')
+        #         print(np.array(
+        #             start_trans.inverted()
+        #             @ link_node.transformation
+        #         ))
+        #         print(world_T_links[link_name])
+
+        # print('final camera pose------------------')
+        # print(
+        #     np.array(
+        #         start_trans.inverted()
+        #         @ sim_obj.get_link_scene_node(14).transformation
+        #     ) @ xyz_rpy_to_T(
+        #         xyz=np.array([0.0, 0.0, 0.1]),
+        #         rpy=np.array([0.0, np.pi / 2, 0.0])
+        #     ) @ xyz_rpy_to_T(
+        #         xyz=np.array([0.0, 0.0, 0.0]),
+        #         rpy=np.array([-1.5708, 0.0, -1.5708])
+        #     )
+        # )
+        # input()
+
         return (
             start_trans.inverted()
             @ agent_trans
