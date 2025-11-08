@@ -8,6 +8,8 @@ import random
 from dataclasses import dataclass
 from typing import Optional
 
+import imageio
+from matplotlib import pyplot as plt
 import numpy as np
 
 from habitat.articulated_agents.robots.stretch_robot import (
@@ -260,6 +262,37 @@ class DynNavRLEnv(RearrangeTask):
             sim.articulated_agent.base_rot = (
                 self._nav_to_info.articulated_agent_start_angle
             )
+        # [ku] Snap to nav mesh after setting position
+        topdown_path = sim.navmesh_with_radius(episode, 0.3, 1.35)
+        topdown_map = imageio.imread(topdown_path)
+        min_xyz, max_xyz = self._sim.pathfinder.get_bounds()
+        for goal in episode.candidate_objects:
+            for v in goal.view_points:
+                v.agent_state.position = sim.pathfinder.snap_point(v.agent_state.position)
+                topdown_map[
+                    int((v.agent_state.position[2] - min_xyz[2]) / 0.01),
+                    int((v.agent_state.position[0] - min_xyz[0]) / 0.01),
+                ] = [0, 255, 0]
+        for goal in episode.candidate_goal_receps:
+            for v in goal.view_points:
+                v.agent_state.position = sim.pathfinder.snap_point(v.agent_state.position)
+                topdown_map[
+                    int((v.agent_state.position[2] - min_xyz[2]) / 0.01),
+                    int((v.agent_state.position[0] - min_xyz[0]) / 0.01),
+                ] = [0, 0, 255]
+        sim.articulated_agent.base_pos = sim.pathfinder.snap_point(sim.articulated_agent.base_pos)
+        topdown_map[
+            int((sim.articulated_agent.base_pos[2] - min_xyz[2]) / 0.01),
+            int((sim.articulated_agent.base_pos[0] - min_xyz[0]) / 0.01),
+        ] = [255, 0, 0]
+        topdown_path = '-'.join(topdown_path.split('-')[:-1]) + f'-{episode.episode_id}.png'
+        # print(episode.episode_id)
+        # print(episode.scene_id)
+        # input(topdown_path)
+        imageio.imwrite(topdown_path, topdown_map)
+        # plt.imshow(topdown_map)
+        # plt.show()
+        sim.navmesh_with_radius(episode, 0.2, 1.35)
 
         self._robot_start_position = sim.articulated_agent.sim_obj.translation
         start_quat = sim.articulated_agent.sim_obj.rotation

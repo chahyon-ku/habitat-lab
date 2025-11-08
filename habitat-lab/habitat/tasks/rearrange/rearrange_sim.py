@@ -9,6 +9,7 @@ import os.path as osp
 import pickle
 import time
 from collections import defaultdict
+import traceback
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -21,7 +22,9 @@ from typing import (
     cast,
 )
 
+import imageio
 import magnum as mn
+from matplotlib import pyplot as plt
 import numpy as np
 import numpy.typing as npt
 
@@ -454,8 +457,8 @@ class RearrangeSim(HabitatSim):
                 [[transform[j][i] for j in range(4)] for i in range(4)]
             )
 
-    @add_perf_timing_func()
-    def _load_navmesh(self, ep_info):
+    def navmesh_with_radius(self, ep_info, radius, height):
+        # print(ep_info.episode_id, radius, height)
         scene_name = ep_info.scene_id.split("/")[-1].split(".")[0]
         base_dir = osp.dirname(osp.dirname(ep_info.scene_id))
         scenes_dir = osp.basename(osp.dirname(ep_info.scene_id))
@@ -464,29 +467,40 @@ class RearrangeSim(HabitatSim):
             "navmeshes",
             scenes_dir,
             self.articulated_agent.cls_uuid,
-            scene_name + ".navmesh",
+            scene_name + f"-{radius:.2f}.navmesh",
         )
-        if osp.exists(navmesh_path):
+        topdown_path = navmesh_path.replace('.navmesh', '.png')
+        if os.path.exists(navmesh_path):
             self.pathfinder.load_nav_mesh(navmesh_path)
         else:
             self.navmesh_settings = NavMeshSettings()
             self.navmesh_settings.set_defaults()
-            agent_config = self.get_agent(0).agent_config
-            self.navmesh_settings.agent_radius = agent_config.radius
-            self.navmesh_settings.agent_height = agent_config.height
+            self.navmesh_settings.agent_radius = radius
+            self.navmesh_settings.agent_height = height
             self.navmesh_settings.agent_max_climb = 0.01
             self.navmesh_settings.include_static_objects = True
+            self.navmesh_settings.cell_size = 0.01
+            self.navmesh_settings.edge_max_error = 0.
+            zero_topdown_path = topdown_path.replace(f'-{radius:.2f}', f'-0.00')
+            if not os.path.exists(zero_topdown_path):
+                self.navmesh_settings.agent_radius = 0.00
+                self.recompute_navmesh(self.pathfinder, self.navmesh_settings)
+                zero_topdown_map = self.pathfinder.get_topdown_view(0.01, 0.1)
+                os.makedirs(osp.dirname(zero_topdown_path), exist_ok=True)
+                imageio.imwrite(zero_topdown_path, (zero_topdown_map.astype(np.uint8))*255)
+                self.navmesh_settings.agent_radius = radius
             self.recompute_navmesh(self.pathfinder, self.navmesh_settings)
             os.makedirs(osp.dirname(navmesh_path), exist_ok=True)
             self.pathfinder.save_nav_mesh(navmesh_path)
+            topdown_map = self.pathfinder.get_topdown_view(0.01, 0.1)
+            topdown_map = np.stack([topdown_map]*3, axis=-1).astype(np.uint8) * 255
+            zero_topdown_map = imageio.imread(zero_topdown_path)
+            topdown_map[
+                zero_topdown_map == 255
+            ] = [128, 128, 128]      # Green: only recomputed has navmesh
+            imageio.imwrite(topdown_path, topdown_map)
 
-        island_classes_path = osp.join(
-            base_dir,
-            "navmeshes",
-            scenes_dir,
-            self.articulated_agent.cls_uuid,
-            scene_name + ".pkl",
-        )
+        island_classes_path = navmesh_path.replace('.navmesh', '.pkl')
         if osp.exists(island_classes_path):
             with open(island_classes_path, "rb") as f:
                 self.navmesh_classification_results = pickle.load(f)
@@ -494,7 +508,6 @@ class RearrangeSim(HabitatSim):
             compute_navmesh_island_classifications(self)
             with open(island_classes_path, "wb") as f:
                 pickle.dump(self.navmesh_classification_results, f)
-
         self._navmesh_vertices = np.stack(
             self.pathfinder.build_navmesh_vertices(), axis=0
         )
@@ -505,6 +518,80 @@ class RearrangeSim(HabitatSim):
         self._largest_island_idx = self.pathfinder.get_island(
             self._navmesh_vertices[np.argmax(self._island_sizes)]
         )
+        return topdown_path
+
+    @add_perf_timing_func()
+    def _load_navmesh(self, ep_info):
+        self.navmesh_with_radius(ep_info, 0.25, 1.41)
+        # scene_name = ep_info.scene_id.split("/")[-1].split(".")[0]
+        # base_dir = osp.dirname(osp.dirname(ep_info.scene_id))
+        # scenes_dir = osp.basename(osp.dirname(ep_info.scene_id))
+        # navmesh_path = osp.join(
+        #     base_dir,
+        #     "navmeshes",
+        #     scenes_dir,
+        #     self.articulated_agent.cls_uuid,
+        #     scene_name + ".navmesh",
+        # )
+        # if osp.exists(navmesh_path):
+        #     self.pathfinder.load_nav_mesh(navmesh_path)
+        # else:
+        #     self.navmesh_settings = NavMeshSettings()
+        #     self.navmesh_settings.set_defaults()
+        #     agent_config = self.get_agent(0).agent_config
+        #     self.navmesh_settings.agent_radius = agent_config.radius
+        #     self.navmesh_settings.agent_height = agent_config.height
+        #     self.navmesh_settings.agent_max_climb = 0.01
+        #     self.navmesh_settings.include_static_objects = True
+        #     self.navmesh_settings.cell_size = 0.01
+        #     self.navmesh_settings.edge_max_error = 0.
+
+        #     self.navmesh_settings.agent_radius = 0.00
+        #     self.recompute_navmesh(self.pathfinder, self.navmesh_settings)
+        #     topdown_map_000 = self.pathfinder.get_topdown_view(0.01, 0.1)
+        #     self.navmesh_settings.agent_radius = 0.27
+        #     self.recompute_navmesh(self.pathfinder, self.navmesh_settings)
+        #     os.makedirs(osp.dirname(navmesh_path), exist_ok=True)
+        #     self.pathfinder.save_nav_mesh(navmesh_path)
+
+        #     topdown_map_028 = self.pathfinder.get_topdown_view(0.01, 0.1)
+        #     topdown_map = np.zeros((*topdown_map_000.shape, 3), dtype=np.uint8)
+        #     topdown_map[
+        #         topdown_map_000
+        #     ] = [128, 128, 128]      # Green: only recomputed has navmesh
+        #     topdown_map[
+        #         topdown_map_028
+        #     ] = [255, 255, 255]  # White: both have navmesh
+        #     imageio.imwrite(navmesh_path.replace(
+        #         '.navmesh',
+        #         f'-{self.navmesh_settings.agent_radius}.png'
+        #     ), topdown_map)
+
+        # island_classes_path = osp.join(
+        #     base_dir,
+        #     "navmeshes",
+        #     scenes_dir,
+        #     self.articulated_agent.cls_uuid,
+        #     scene_name + ".pkl",
+        # )
+        # if osp.exists(island_classes_path):
+        #     with open(island_classes_path, "rb") as f:
+        #         self.navmesh_classification_results = pickle.load(f)
+        # else:
+        #     compute_navmesh_island_classifications(self)
+        #     with open(island_classes_path, "wb") as f:
+        #         pickle.dump(self.navmesh_classification_results, f)
+
+        # self._navmesh_vertices = np.stack(
+        #     self.pathfinder.build_navmesh_vertices(), axis=0
+        # )
+        # self._island_sizes = [
+        #     self.pathfinder.island_radius(p) for p in self._navmesh_vertices
+        # ]
+        # self._max_island_size = max(self._island_sizes)
+        # self._largest_island_idx = self.pathfinder.get_island(
+        #     self._navmesh_vertices[np.argmax(self._island_sizes)]
+        # )
 
     @property
     def largest_island_idx(self) -> int:
