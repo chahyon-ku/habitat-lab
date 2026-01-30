@@ -456,12 +456,24 @@ class RearrangeSim(HabitatSim):
             self._targets[target_handle] = mn.Matrix4(
                 [[transform[j][i] for j in range(4)] for i in range(4)]
             )
+    
+    def generate_topdown_map(self, zero_topdown_map):
+        topdown_map = self.pathfinder.get_topdown_view(0.01, 0.1)  # 1 = obstacle
+        topdown_map = np.stack([topdown_map]*3, axis=-1).astype(np.uint8) * 128
+        if zero_topdown_map is not None:
+            topdown_map[
+                np.all(topdown_map == [0, 0, 0], axis=-1)
+            ] = [64, 64, 64]
+            topdown_map[
+                np.all(zero_topdown_map == [0, 0, 0], axis=-1)
+            ] = [0, 0, 0]
+    
+        return topdown_map
 
-    def navmesh_with_radius(self, ep_info, radius, height):
-        # print(ep_info.episode_id, radius, height)
-        scene_name = ep_info.scene_id.split("/")[-1].split(".")[0]
-        base_dir = osp.dirname(osp.dirname(ep_info.scene_id))
-        scenes_dir = osp.basename(osp.dirname(ep_info.scene_id))
+    def navmesh_with_radius(self, episode, radius, height):
+        scene_name = episode.scene_id.split("/")[-1].split(".")[0]
+        base_dir = osp.dirname(osp.dirname(episode.scene_id))
+        scenes_dir = osp.basename(osp.dirname(episode.scene_id))
         navmesh_path = osp.join(
             base_dir,
             "navmeshes",
@@ -470,59 +482,88 @@ class RearrangeSim(HabitatSim):
             scene_name + f"-{radius:.2f}.navmesh",
         )
         topdown_path = navmesh_path.replace('.navmesh', '.png')
-        if os.path.exists(navmesh_path):
+        island_classes_path = navmesh_path.replace('.navmesh', '.pkl')
+        navmesh_vertices_path = navmesh_path.replace('.navmesh', '-vertices.npy')
+        island_sizes_path = navmesh_path.replace('.navmesh', '-island_sizes.pkl')
+        max_island_size_path = navmesh_path.replace('.navmesh', '-max_island_size.pkl')
+        largest_island_idx_path = navmesh_path.replace('.navmesh', '-largest_island_idx.pkl')
+        if (
+            os.path.exists(navmesh_path)
+            and os.path.exists(topdown_path)
+            and os.path.exists(island_classes_path)
+            and os.path.exists(navmesh_vertices_path)
+            and os.path.exists(island_sizes_path)
+            and os.path.exists(max_island_size_path)
+            and os.path.exists(largest_island_idx_path)
+        ):
             self.pathfinder.load_nav_mesh(navmesh_path)
+            with open(island_classes_path, "rb") as f:
+                self.navmesh_classification_results = pickle.load(f)
+            self._navmesh_vertices = np.load(navmesh_vertices_path)
+            with open(island_sizes_path, "rb") as f:
+                self._island_sizes = pickle.load(f)
+            with open(max_island_size_path, "rb") as f:
+                self._max_island_size = pickle.load(f)
+            with open(largest_island_idx_path, "rb") as f:
+                self._largest_island_idx = pickle.load(f)
         else:
             self.navmesh_settings = NavMeshSettings()
             self.navmesh_settings.set_defaults()
-            self.navmesh_settings.agent_radius = radius
+            # self.navmesh_settings.agent_radius = radius
             self.navmesh_settings.agent_height = height
             self.navmesh_settings.agent_max_climb = 0.01
             self.navmesh_settings.include_static_objects = True
             self.navmesh_settings.cell_size = 0.01
             self.navmesh_settings.edge_max_error = 0.
-            zero_topdown_path = topdown_path.replace(f'-{radius:.2f}', f'-0.00')
-            if not os.path.exists(zero_topdown_path):
-                self.navmesh_settings.agent_radius = 0.00
-                self.recompute_navmesh(self.pathfinder, self.navmesh_settings)
-                zero_topdown_map = self.pathfinder.get_topdown_view(0.01, 0.1)
-                os.makedirs(osp.dirname(zero_topdown_path), exist_ok=True)
-                imageio.imwrite(zero_topdown_path, (zero_topdown_map.astype(np.uint8))*255)
-                self.navmesh_settings.agent_radius = radius
-            self.recompute_navmesh(self.pathfinder, self.navmesh_settings)
-            os.makedirs(osp.dirname(navmesh_path), exist_ok=True)
-            self.pathfinder.save_nav_mesh(navmesh_path)
-            topdown_map = self.pathfinder.get_topdown_view(0.01, 0.1)
-            topdown_map = np.stack([topdown_map]*3, axis=-1).astype(np.uint8) * 255
-            zero_topdown_map = imageio.imread(zero_topdown_path)
-            topdown_map[
-                zero_topdown_map == 255
-            ] = [128, 128, 128]      # Green: only recomputed has navmesh
-            imageio.imwrite(topdown_path, topdown_map)
+            self.navmesh_settings.agent_radius = 0.
 
-        island_classes_path = navmesh_path.replace('.navmesh', '.pkl')
-        if osp.exists(island_classes_path):
-            with open(island_classes_path, "rb") as f:
-                self.navmesh_classification_results = pickle.load(f)
-        else:
+            # save zero topdown map
+            zero_topdown_path = topdown_path.replace(f'-{radius:.2f}', f'-0.00')
+            if os.path.exists(zero_topdown_path):
+                zero_topdown_map = imageio.imread(zero_topdown_path)
+            else:
+                self.navmesh_settings.agent_radius = 0.
+                self.recompute_navmesh(self.pathfinder, self.navmesh_settings)
+                zero_topdown_map = self.generate_topdown_map(zero_topdown_map=None)
+                os.makedirs(osp.dirname(zero_topdown_path), exist_ok=True)
+                imageio.imwrite(zero_topdown_path, zero_topdown_map)
+            # save topdown map
+            if radius > 0:
+                self.navmesh_settings.agent_radius = radius
+                self.recompute_navmesh(self.pathfinder, self.navmesh_settings)
+                topdown_map = self.generate_topdown_map(zero_topdown_map=zero_topdown_map)
+                os.makedirs(osp.dirname(navmesh_path), exist_ok=True)
+                imageio.imwrite(topdown_path, topdown_map)
+            else:
+                topdown_map = zero_topdown_map
+            # save navmesh
+            self.pathfinder.save_nav_mesh(navmesh_path)
+            # save island classifications
             compute_navmesh_island_classifications(self)
             with open(island_classes_path, "wb") as f:
                 pickle.dump(self.navmesh_classification_results, f)
-        self._navmesh_vertices = np.stack(
-            self.pathfinder.build_navmesh_vertices(), axis=0
-        )
-        self._island_sizes = [
-            self.pathfinder.island_radius(p) for p in self._navmesh_vertices
-        ]
-        self._max_island_size = max(self._island_sizes)
-        self._largest_island_idx = self.pathfinder.get_island(
-            self._navmesh_vertices[np.argmax(self._island_sizes)]
-        )
+            self._navmesh_vertices = np.stack(
+                self.pathfinder.build_navmesh_vertices(), axis=0
+            )
+            self._island_sizes = [
+                self.pathfinder.island_radius(p) for p in self._navmesh_vertices
+            ]
+            self._max_island_size = max(self._island_sizes)
+            self._largest_island_idx = self.pathfinder.get_island(
+                self._navmesh_vertices[np.argmax(self._island_sizes)]
+            )
+            np.save(navmesh_vertices_path, self._navmesh_vertices)
+            with open(island_sizes_path, "wb") as f:
+                pickle.dump(self._island_sizes, f)
+            with open(max_island_size_path, "wb") as f:
+                pickle.dump(self._max_island_size, f)
+            with open(largest_island_idx_path, "wb") as f:
+                pickle.dump(self._largest_island_idx, f)
         return topdown_path
 
     @add_perf_timing_func()
     def _load_navmesh(self, ep_info):
-        self.navmesh_with_radius(ep_info, 0.25, 1.41)
+        self.navmesh_with_radius(ep_info, 0.0, 1.41)
         # scene_name = ep_info.scene_id.split("/")[-1].split(".")[0]
         # base_dir = osp.dirname(osp.dirname(ep_info.scene_id))
         # scenes_dir = osp.basename(osp.dirname(ep_info.scene_id))

@@ -4,6 +4,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import random
 from dataclasses import dataclass
 from typing import Optional
@@ -264,35 +265,39 @@ class DynNavRLEnv(RearrangeTask):
             )
         # [ku] Snap to nav mesh after setting position
         topdown_path = sim.navmesh_with_radius(episode, 0.3, 1.35)
-        topdown_map = imageio.imread(topdown_path)
-        min_xyz, max_xyz = self._sim.pathfinder.get_bounds()
-        for goal in episode.candidate_objects:
-            for v in goal.view_points:
-                v.agent_state.position = sim.pathfinder.snap_point(v.agent_state.position)
-                topdown_map[
-                    int((v.agent_state.position[2] - min_xyz[2]) / 0.01),
-                    int((v.agent_state.position[0] - min_xyz[0]) / 0.01),
-                ] = [0, 255, 0]
         for goal in episode.candidate_goal_receps:
             for v in goal.view_points:
                 v.agent_state.position = sim.pathfinder.snap_point(v.agent_state.position)
-                topdown_map[
-                    int((v.agent_state.position[2] - min_xyz[2]) / 0.01),
-                    int((v.agent_state.position[0] - min_xyz[0]) / 0.01),
-                ] = [0, 0, 255]
+        for goal in episode.candidate_objects:
+            for v in goal.view_points:
+                v.agent_state.position = sim.pathfinder.snap_point(v.agent_state.position)
         sim.articulated_agent.base_pos = sim.pathfinder.snap_point(sim.articulated_agent.base_pos)
-        topdown_map[
-            int((sim.articulated_agent.base_pos[2] - min_xyz[2]) / 0.01),
-            int((sim.articulated_agent.base_pos[0] - min_xyz[0]) / 0.01),
-        ] = [255, 0, 0]
-        topdown_path = '-'.join(topdown_path.split('-')[:-1]) + f'-{episode.episode_id}.png'
-        # print(episode.episode_id)
-        # print(episode.scene_id)
-        # input(topdown_path)
-        imageio.imwrite(topdown_path, topdown_map)
-        # plt.imshow(topdown_map)
-        # plt.show()
-        sim.navmesh_with_radius(episode, 0.2, 1.35)
+
+        episode_topdown_path = topdown_path.replace('.png', f'-{episode.episode_id}.png')
+        if not os.path.exists(episode_topdown_path):
+            topdown_map = imageio.imread(topdown_path)
+            min_xyz, _ = sim.pathfinder.get_bounds()
+            def mark(pos, color, size):
+                for dx in range(-size, size+1):
+                    for dz in range(-size, size+1):
+                        topdown_map[
+                            int((pos[2] - min_xyz[2]) / 0.01) + dz,
+                            int((pos[0] - min_xyz[0]) / 0.01) + dx,
+                        ] = color
+
+            for goal in episode.candidate_goal_receps:
+                for v in goal.view_points:
+                    mark(v.agent_state.position, [0, 0, 255], size=2)
+            for goal in episode.candidate_objects:
+                for v in goal.view_points:
+                    mark(v.agent_state.position, [0, 255, 0], size=2)
+            mark(sim.articulated_agent.base_pos, [255, 0, 0], size=2)
+            assert np.any(np.all(topdown_map == [255, 0, 0], axis=-1)), "Robot position not on navmesh!"
+            assert np.any(np.all(topdown_map == [0, 255, 0], axis=-1)), "Goal object position not on navmesh!"
+            assert np.any(np.all(topdown_map == [0, 0, 255], axis=-1)), "Goal receptacle position not on navmesh!"
+
+            imageio.imwrite(episode_topdown_path, topdown_map)
+        topdown_path = sim.navmesh_with_radius(episode, 0.0, 1.35)
 
         self._robot_start_position = sim.articulated_agent.sim_obj.translation
         start_quat = sim.articulated_agent.sim_obj.rotation

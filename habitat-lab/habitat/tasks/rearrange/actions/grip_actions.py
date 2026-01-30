@@ -381,9 +381,10 @@ class GazeGraspAction(MagicGraspAction):
             if distance_to_bbox > self._grasp_thresh_dist:
                 return
 
-        else:
+        else:  # NOTE(ku) this is used for home robot
             closest = closest_ids[0]
             if distances[closest] > self._grasp_thresh_dist:
+                raise RuntimeError(f'[GazeGraspAction._snap_closest_valid_object] distances[closest]: {distances[closest]} > self._grasp_thresh_dist: {self._grasp_thresh_dist}.')
                 return
 
         snap_obj_idx = np.array(self._sim.scene_obj_ids)[
@@ -394,6 +395,8 @@ class GazeGraspAction(MagicGraspAction):
         )
         if np.sum(obj_seg) > 0:
             self.cur_grasp_mgr.snap_to_obj(snap_obj_idx, force=True)
+        else:
+            raise RuntimeError(f'[GazeGraspAction._snap_closest_valid_object] np.sum(obj_seg) == 0. cannot snap to object id: {snap_obj_idx}.')
 
     def _grasp(self):
         if self._oracle_snap:
