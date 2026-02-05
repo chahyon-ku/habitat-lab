@@ -341,11 +341,27 @@ class TargetIoUCoverage(Measure):
         self.update_metric(*args, task=task, **kwargs)
 
     def update_metric(self, *args, episode, task, observations, **kwargs):
-        object_id = self._get_closest_object_id_in_view(episode, observations)
-        if object_id == -1:
-            self._metric = 0
-            return
-        self._metric = compute_pixel_coverage(
-            observations["head_panoptic"],
-            object_id + self._object_ids_start,
-        )
+        # object_id = self._get_closest_object_id_in_view(episode, observations)
+        # if object_id == -1:
+        #     self._metric = 0
+        #     return
+        # self._metric = compute_pixel_coverage(
+        #     observations["head_panoptic"],
+        #     object_id + self._object_ids_start,
+        # )
+        
+        # NOTE(ku) remove redundant self._max_goal_dist filtering
+        uniques, counts = np.unique(observations["head_panoptic"], return_counts=True)
+        unique_counts = dict(zip(uniques, counts))
+        max_count = 0
+        for scene_object_id in self._get_goals(episode):
+            max_count = max(
+                max_count,
+                unique_counts.get(
+                    self._get_object_id(scene_object_id)
+                    + self._object_ids_start,
+                    0,
+                ),
+            )
+        h, w = observations["head_panoptic"].shape[:2]
+        self._metric = max_count / (h * w)

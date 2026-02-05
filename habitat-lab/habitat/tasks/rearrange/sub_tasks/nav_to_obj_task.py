@@ -292,6 +292,9 @@ class DynNavRLEnv(RearrangeTask):
                 for v in goal.view_points:
                     mark(v.agent_state.position, [0, 255, 0], size=2)
             mark(sim.articulated_agent.base_pos, [255, 0, 0], size=2)
+            for goal in episode.candidate_objects:
+                mark(self._sim.get_scene_pos()[int(goal.object_id)], [255, 255, 0], size=2)
+
             assert np.any(np.all(topdown_map == [255, 0, 0], axis=-1)), "Robot position not on navmesh!"
             assert np.any(np.all(topdown_map == [0, 255, 0], axis=-1)), "Goal object position not on navmesh!"
             assert np.any(np.all(topdown_map == [0, 0, 255], axis=-1)), "Goal receptacle position not on navmesh!"
