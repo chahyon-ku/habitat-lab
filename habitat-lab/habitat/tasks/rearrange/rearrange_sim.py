@@ -563,7 +563,7 @@ class RearrangeSim(HabitatSim):
 
     @add_perf_timing_func()
     def _load_navmesh(self, ep_info):
-        self.navmesh_with_radius(ep_info, 0.0, 1.41)
+        self.navmesh_with_radius(ep_info, 0.0, 1.35)
         # scene_name = ep_info.scene_id.split("/")[-1].split(".")[0]
         # base_dir = osp.dirname(osp.dirname(ep_info.scene_id))
         # scenes_dir = osp.basename(osp.dirname(ep_info.scene_id))

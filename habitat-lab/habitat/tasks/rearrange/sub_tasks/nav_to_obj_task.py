@@ -9,6 +9,10 @@ import random
 from dataclasses import dataclass
 from typing import Optional
 
+from habitat.core.simulator import AgentState
+from habitat.datasets.rearrange.samplers.receptacle import parse_receptacles_from_user_config
+from habitat.datasets.rearrange.viewpoints import ObjectViewLocation
+from habitat.tasks.nav.object_nav_task import ObjectGoal
 import imageio
 from matplotlib import pyplot as plt
 import numpy as np
@@ -263,6 +267,54 @@ class DynNavRLEnv(RearrangeTask):
             sim.articulated_agent.base_rot = (
                 self._nav_to_info.articulated_agent_start_angle
             )
+        # NOTE(ku) regenerate candidate goal receps because some are missing
+        #  e.g. big bed in 0040-103997586_171030669_845
+        #  hamper doesn't exist?
+        goal_recep_category_name = episode.candidate_goal_receps[0].object_category
+        rom = self._sim.get_rigid_object_manager()
+        new_candidate_goal_receps = []
+        for i, handle in enumerate(rom.get_object_handles()):
+            obj = rom.get_object_by_handle(handle)
+            source_template_file = obj.creation_attributes.file_directory
+            user_attr = obj.user_attributes
+            user_attr_keys = user_attr.get_subconfig_keys()
+            if any(key.startswith("receptacle_") for key in user_attr_keys):
+                obj_name = os.path.basename(obj.creation_attributes.handle).split(
+                    ".", 1
+                )[0]
+                category_name = self._receptacle_categories.get(obj_name)
+                if category_name == goal_recep_category_name:
+                    receptacles = parse_receptacles_from_user_config(
+                        user_attr,
+                        parent_object_handle=handle,
+                        parent_template_directory=source_template_file,
+                    )
+                    for receptacle in receptacles:
+                        object_id = rom.get_object_id_by_handle(
+                            receptacle.parent_object_handle
+                        )
+                        pos = receptacle.get_surface_center(sim)
+                        rec_name = receptacle.parent_object_handle
+                        # if the handle name is None, try extracting category from receptacle name
+                        rec_name = (
+                            receptacle.name if rec_name is None else rec_name.split(":")[0]
+                        )
+                        new_candidate_goal_receps.append(ObjectGoal(
+                            position=np.array([pos.x, pos.y, pos.z]),
+                            object_name=receptacle.unique_name,
+                            object_id=str(object_id),
+                            object_category=goal_recep_category_name,
+                            view_points=[ObjectViewLocation(AgentState(
+                                [pos.x, pos.y, pos.z],
+                                [0, 0, 0, 1],
+                            ), 0.1)],
+                        ))
+        if len(new_candidate_goal_receps) == 0:  # NOTE(ku) no hamper in 104348361_171513414 - 257, 375, 609, 733, 974, 1142
+            print("unable to find any", goal_recep_category_name, "in", episode.scene_id)
+            print("defaulting to original receptacles")
+        else:
+            episode.candidate_goal_receps = new_candidate_goal_receps
+
         # [ku] Snap to nav mesh after setting position
         topdown_path = sim.navmesh_with_radius(episode, 0.3, 1.35)
         for goal in episode.candidate_goal_receps:
@@ -273,11 +325,26 @@ class DynNavRLEnv(RearrangeTask):
                 v.agent_state.position = sim.pathfinder.snap_point(v.agent_state.position)
         sim.articulated_agent.base_pos = sim.pathfinder.snap_point(sim.articulated_agent.base_pos)
 
+        # NOTE(ku) 90 - 99 collides every frame due to height
+        scene_id = episode.scene_id.split('/')[-1].split('.')[0]
+        if scene_id == "103997895_171031182":
+            # print("NOTE(ku) scene_id is", scene_id)
+            # print("NOTE(ku) lifting robot from", self._sim.articulated_agent.base_pos)
+            self._sim.articulated_agent.base_pos = np.array([
+                self._sim.articulated_agent.base_pos[0],
+                self._sim.articulated_agent.base_pos[1] + 0.025,
+                # self._sim.articulated_agent.base_pos[1] + 0.,
+                self._sim.articulated_agent.base_pos[2]
+            ])
+            # print("NOTE(ku) to", self._sim.articulated_agent.base_pos)
+
         episode_topdown_path = topdown_path.replace('.png', f'-{episode.episode_id}.png')
         if not os.path.exists(episode_topdown_path):
             topdown_map = imageio.imread(topdown_path)
             min_xyz, _ = sim.pathfinder.get_bounds()
             def mark(pos, color, size):
+                if np.any(np.isnan(pos)):
+                    return
                 for dx in range(-size, size+1):
                     for dz in range(-size, size+1):
                         topdown_map[
@@ -285,10 +352,14 @@ class DynNavRLEnv(RearrangeTask):
                             int((pos[0] - min_xyz[0]) / 0.01) + dx,
                         ] = color
 
+            assert len(episode.candidate_goal_receps) > 0, "no candidate goal receps"
             for goal in episode.candidate_goal_receps:
+                mark(goal.position, [0, 0, 255], size=2)
                 for v in goal.view_points:
                     mark(v.agent_state.position, [0, 0, 255], size=2)
+            assert len(episode.candidate_objects) > 0, "no candidate object"
             for goal in episode.candidate_objects:
+                mark(goal.position, [0, 255, 0], size=2)
                 for v in goal.view_points:
                     mark(v.agent_state.position, [0, 255, 0], size=2)
             mark(sim.articulated_agent.base_pos, [255, 0, 0], size=2)

@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import os
 import pickle
 from typing import Any, Optional
 
@@ -383,34 +384,33 @@ class OVMMDistToPlaceGoal(DistToGoal):
     def _get_uuid(*args, **kwargs):
         return OVMMDistToPlaceGoal.cls_uuid
 
-    def _get_goals(self, task, episode):
-        return np.stack(
-            [
-                view_point.agent_state.position
-                for goal in episode.candidate_goal_receps
-                for view_point in goal.view_points
-            ],
-            axis=0,
-        )
+    # def _get_goals(self, task, episode):
+    #     return np.stack(
+    #         [
+    #             view_point.agent_state.position
+    #             for goal in episode.candidate_goal_receps
+    #             for view_point in goal.view_points
+    #         ],
+    #         axis=0,
+    #     )
     # def update_metric(self, *args, episode, task, **kwargs):
     #     super().update_metric(*args, episode=episode, task=task, **kwargs)
     #     print(f"[OVMMDistToPlaceGoal] dist to place goal: {self._metric:.4f}")
     # NOTE(ku) base - object euclidean distance instead of base - pick location geodesic distance
-    # def _get_goals(self, task, episode):
-    #     allowed_scene_obj_ids = [
-    #         int(g.object_id) for g in self._sim.ep_info.candidate_goal_receps
-    #     ]
-    #     object_positions = self._sim.get_scene_pos()[allowed_scene_obj_ids]
-    #     object_positions[:, 1] = self._sim.articulated_agent.base_pos[1]  # object on receptacle to floor height
-    #     return object_positions
+    def _get_goals(self, task, episode):
+        object_positions = np.array([
+            g.position for g in self._sim.ep_info.candidate_goal_receps
+        ])
+        object_positions[:, 1] = self._sim.articulated_agent.base_pos[1]  # object on receptacle to floor height
+        return object_positions
 
-    # def update_metric(self, *args, episode, task, **kwargs):
-    #     goals = self._get_goals(task, episode)
-    #     dists = np.linalg.norm(
-    #         self._sim.articulated_agent.base_pos - goals, axis=1
-    #     )
-    #     min_dist = np.min(dists)
-    #     self._metric = min_dist
+    def update_metric(self, *args, episode, task, **kwargs):
+        goals = self._get_goals(task, episode)
+        dists = np.linalg.norm(
+            self._sim.articulated_agent.base_pos - goals, axis=1
+        )
+        min_dist = np.min(dists)
+        self._metric = min_dist
 
 
 @registry.register_measure

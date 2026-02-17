@@ -215,10 +215,12 @@ class OVMMRotDistToGoal(RotDistToGoal):
             goals = episode.candidate_objects
         else:
             goals = episode.candidate_goal_receps
-        closest_idx = find_closest_goal_index_within_distance(
-            self._sim, goals, episode.episode_id, max_dist=-1
-        )
-        return goals[closest_idx].position
+        # closest_idx = find_closest_goal_index_within_distance(
+        #     self._sim, goals, episode.episode_id, max_dist=-1
+        # )
+        # return goals[closest_idx].position
+        # NOTE(ku) remove rotdistgoal for now from broken g.view_points for episode.candidate_goal_receps
+        return goals[0].position
 
 
 @registry.register_measure

@@ -108,6 +108,9 @@ class ObjAnywhereOnGoal(Measure):
         picked_idx = task._picked_object_idx
         self._metric = {str(picked_idx): False}
         abs_obj_id = self._sim.scene_obj_ids[picked_idx]
+        valid_goal_rec_obj_ids = {  # NOTE(ku) include extra goal receptacles added in nav_to_obj_task
+            int(g.object_id) for g in episode.candidate_goal_receps
+        }
         for cp in cps:
             if cp.object_id_a == abs_obj_id or cp.object_id_b == abs_obj_id:
                 if cp.contact_distance < -0.01:
@@ -123,7 +126,8 @@ class ObjAnywhereOnGoal(Measure):
                     # Check if the other object has an id that is acceptable
                     self._metric = {
                         str(picked_idx): other_obj_id
-                        in self._sim.valid_goal_rec_obj_ids
+                        # in self._sim.valid_goal_rec_obj_ids
+                        in valid_goal_rec_obj_ids
                         and contact_point[1]
                         >= MAX_FLOOR_HEIGHT  # ensure that the object is not on the floor
                     }
