@@ -40,7 +40,7 @@ def get_package_version():
 if __name__ == "__main__":
     setup(
         name="habitat-baselines",
-        install_requires=collect_requirements(),
+        install_requires=[],
         packages=find_packages(),
         version=get_package_version(),
         include_package_data=True,

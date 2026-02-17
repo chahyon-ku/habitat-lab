@@ -727,8 +727,9 @@ class RobotCollisions(UsesArticulatedAgentInterface, Measure):
 
     def update_metric(self, *args, episode, task, observations, **kwargs):
         cur_coll_info = self._task.get_cur_collision_info(self.agent_id)
-        # if cur_coll_info.total_collisions > 0:
-        #     print("collision")
+        if cur_coll_info.total_collisions > 0:
+            print("collision")
+            print("collision")
         #     print()
         #     raise RuntimeError("Collision detected!")
         self._accum_coll_info += cur_coll_info
