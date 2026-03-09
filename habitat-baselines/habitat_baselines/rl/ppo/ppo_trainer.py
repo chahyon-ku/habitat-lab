@@ -924,7 +924,7 @@ class PPOTrainer(BaseRLTrainer):
         # Map location CPU is almost always better than mapping to a CUDA device.
         if self.config.habitat_baselines.eval.should_load_ckpt:
             ckpt_dict = self.load_checkpoint(
-                checkpoint_path, map_location="cpu"
+                checkpoint_path, map_location="cpu", weights_only=False
             )
             step_id = ckpt_dict["extra_state"]["step"]
             print(step_id)
@@ -993,19 +993,22 @@ class PPOTrainer(BaseRLTrainer):
         )
 
         test_recurrent_hidden_states = torch.zeros(
-            self.config.habitat_baselines.num_environments,
+            # self.config.habitat_baselines.num_environments,
+            self.envs.num_envs,
             self.actor_critic.num_recurrent_layers,
             ppo_cfg.hidden_size,
             device=self.device,
         )
         prev_actions = torch.zeros(
-            self.config.habitat_baselines.num_environments,
+            # self.config.habitat_baselines.num_environments,
+            self.envs.num_envs,
             *action_shape,
             device=self.device,
             dtype=torch.long if discrete_actions else torch.float,
         )
         not_done_masks = torch.zeros(
-            self.config.habitat_baselines.num_environments,
+            # self.config.habitat_baselines.num_environments,
+            self.envs.num_envs,
             1,
             device=self.device,
             dtype=torch.bool,
